@@ -156,7 +156,9 @@ def make_compat_graph_v1(settings, name, nodes):
     ).encode()
 
 
-def make_compat_graph_nodes_v1(d, ref, dep=0, p="", r={}):
+def make_compat_graph_nodes_v1(d, ref, dep=0, p="", r=None):
+    if r is None:
+        r = {}
     if "name" not in d:
         d["name"] = ""
         name = "."

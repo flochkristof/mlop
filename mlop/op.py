@@ -138,6 +138,8 @@ class Op:
         )
         self._step = 0
         self._queue = queue.Queue()
+        self._drained = threading.Event()
+        self._drained.set()
         atexit.register(self.finish)
 
     def start(self) -> None:
@@ -162,6 +164,7 @@ class Op:
     ) -> None:
         """Log run data"""
         if self.settings.mode == "perf":
+            self._drained.clear()
             self._queue.put((data, step), block=False)
         else:  # bypass queue
             self._log(data=data, step=step)
@@ -170,8 +173,7 @@ class Op:
         """Finish logging"""
         try:
             self._monitor.stop(code)
-            while not self._queue.empty():
-                time.sleep(self.settings.x_internal_check_process)
+            self._drained.wait()
             self._store.stop() if self._store else None
             self._iface.stop() if self._iface else None  # fixed order
         except (Exception, KeyboardInterrupt) as e:
@@ -266,13 +268,15 @@ class Op:
     def _worker(self, stop) -> None:
         while not stop() or not self._queue.empty():
             try:
-                # if queue seems empty, wait for x_internal_check_process before it considers it empty to save compute
                 self._log(
                     *self._queue.get(
                         block=True, timeout=self.settings.x_internal_check_process
                     )
                 )
+                if self._queue.empty():
+                    self._drained.set()
             except queue.Empty:
+                self._drained.set()
                 continue
             except Exception as e:
                 time.sleep(self.settings.x_internal_check_process)  # debounce

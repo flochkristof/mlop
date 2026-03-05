@@ -440,7 +440,9 @@ def get_args(module):
     return info
 
 
-def get_shape(tensor, r=set()):
+def get_shape(tensor, r=None):
+    if r is None:
+        r = set()
     if hasattr(tensor, "size"):
         return list(tensor.size())  # pytorch
     elif hasattr(tensor, "get_shape"):

@@ -23,6 +23,8 @@ class DataStore:
         self.cursor = self.conn.cursor()
 
         self._stop_event = threading.Event()
+        self._drained = threading.Event()
+        self._drained.set()
         self._lock = threading.Lock()
         self._queue = queue.Queue()
         self._thread = None
@@ -54,11 +56,11 @@ class DataStore:
         self.conn.commit()
 
     def insert(self, num=None, data=None, file=None, timestamp=None, step=None):
+        self._drained.clear()
         self._queue.put((num, data, file, timestamp, step))
 
     def stop(self):
-        while not self._queue.empty():
-            pass
+        self._drained.wait()
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=None)  # TODO: investigate hanging
@@ -103,6 +105,8 @@ class DataStore:
                 except queue.Empty:
                     continue
             self._insert(batch_num, batch_file)
+            if self._queue.empty():
+                self._drained.set()
 
     def _insert(self, d, f):
         with self._lock:

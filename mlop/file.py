@@ -51,8 +51,11 @@ class File:
         return mimetypes.guess_type(self._path)[0] or "application/octet-stream"
 
     def _hash(self) -> str:  # do not truncate
+        h = hashlib.sha256()
         with open(self._path, "rb") as f:
-            return hashlib.sha256(f.read()).hexdigest()
+            for chunk in iter(lambda: f.read(262144), b""):
+                h.update(chunk)
+        return h.hexdigest()
 
     def _mkcopy(self, dir) -> None:
         if not hasattr(self, "_tmp"):
@@ -70,13 +73,13 @@ class Artifact(File):
         self,
         data: str = None,
         caption: Union[str, None] = None,
-        metadata: dict = dict(),
+        metadata: dict = None,
         **kwargs,
     ) -> None:
         self._name = caption + f".{uuid.uuid4()}" if caption else f"{uuid.uuid4()}"
         self._id = f"{uuid.uuid4()}{uuid.uuid4()}".replace("-", "")
 
-        self._metadata = metadata
+        self._metadata = metadata if metadata is not None else {}
         if isinstance(data, str) and os.path.exists(data):
             self._path = os.path.abspath(data)
 

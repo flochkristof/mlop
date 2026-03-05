@@ -69,6 +69,10 @@ class ServerInterface:
         )
 
         self._stop_event = threading.Event()
+        self._drained_num = threading.Event()
+        self._drained_num.set()
+        self._drained_data = threading.Event()
+        self._drained_data.set()
 
         self._queue_num = queue.Queue()
         self._thread_num = None
@@ -106,6 +110,7 @@ class ServerInterface:
                     self._queue_num,
                     self._stop_event.is_set,
                     "num",
+                    self._drained_num,
                 ),
                 daemon=True,
             )
@@ -119,6 +124,7 @@ class ServerInterface:
                     self._queue_data,
                     self._stop_event.is_set,
                     "data",
+                    self._drained_data,
                 ),
                 daemon=True,
             )
@@ -153,10 +159,12 @@ class ServerInterface:
         with self._lock_progress:  # enforce one thread at a time
             self._total += 1
             if num:
+                self._drained_num.clear()
                 self._queue_num.put(
                     make_compat_num_v1(num, timestamp, step), block=False
                 )
             if data:
+                self._drained_data.clear()
                 self._queue_data.put(
                     make_compat_data_v1(data, timestamp, step), block=False
                 )
@@ -169,8 +177,8 @@ class ServerInterface:
                 self._thread_file.start()
 
     def save(self) -> None:
-        while not self._queue_num.empty() or not self._queue_data.empty():
-            time.sleep(self.settings.x_internal_check_process / 10)  # TODO: cleanup
+        self._drained_num.wait()
+        self._drained_data.wait()
 
     def stop(self) -> None:
         if self._thread_progress is None:
@@ -258,9 +266,11 @@ class ServerInterface:
 
             time.sleep(self.settings.x_internal_check_process / 2)
 
-    def _worker_publish(self, e, h, q, stop, name=None):
+    def _worker_publish(self, e, h, q, stop, name=None, drained=None):
         while not (q.empty() and stop()):  # terminates only when both conditions met
             if q.empty():
+                if drained is not None:
+                    drained.set()
                 time.sleep(self.settings.x_internal_check_process)  # debounce
             else:
                 _ = self._post_v1(
@@ -270,6 +280,8 @@ class ServerInterface:
                     client=self.client,
                     name=name,
                 )
+                if q.empty() and drained is not None:
+                    drained.set()
 
     def _worker_storage(self, f, url, data):
         _ = self._put_v1(
