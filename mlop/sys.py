@@ -27,7 +27,8 @@ class System:
             self.cpu_freq: List[Dict[str, float]] = [
                 i._asdict() for i in psutil.cpu_freq(percpu=True)
             ]
-        except Exception:  # errors on darwin t81xx
+            assert self.cpu_freq
+        except Exception:  # errors on aarch64
             self.cpu_freq = [{"current": 0, "min": 0, "max": 0}]
 
         self.svmem: Dict[str, Any] = psutil.virtual_memory()._asdict()
@@ -64,6 +65,8 @@ class System:
         self.git: Dict[str, Any] = self.get_git()
 
     def __getattr__(self, name: str) -> Optional[Any]:
+        if name == "settings" or name.startswith("_"):
+            raise AttributeError(name)
         return self.get_psutil(name)
 
     def get_psutil(self, name: str) -> Optional[Any]:  # handling os specific methods
@@ -236,9 +239,7 @@ class System:
                 import pynvml
 
                 for h in self.gpu["nvidia"]["handles"]:
-                    dev = (
-                        str(pynvml.nvmlDeviceGetName(h))[2:-1].lower().replace(" ", "_")
-                    )
+                    dev = str(pynvml.nvmlDeviceGetName(h)).lower().replace(" ", "_")
                     d[f"{p}/gpu.nvda.{dev}.pct"] = pynvml.nvmlDeviceGetUtilizationRates(
                         h
                     ).gpu
@@ -248,8 +249,7 @@ class System:
                     d[f"{p}/gpu.nvda.{dev}.power"] = pynvml.nvmlDeviceGetPowerUsage(h)
         return d
 
-    @PendingDeprecationWarning
-    def monitor_human(self) -> Dict[str, Any]:
+    def monitor_human(self) -> Dict[str, Any]:  # TODO: deprecate
         try:
             cpu_freq = [i.current for i in psutil.cpu_freq(percpu=True)]
         except Exception:  # errors on darwin t81xx

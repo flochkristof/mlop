@@ -10,15 +10,16 @@ tag = "Settings"
 
 class Settings:
     tag: str = f"{__name__.split('.')[0]}"
-    dir: str = str(os.path.abspath(os.getcwd()))
-
     _auth: str = None
-    _sys: Dict[str, Any] = {}
-    compat: Dict[str, Any] = {}
-    project: str = tag
+
+    _sys: Dict[str, Any] = None
+    dir: str = None
+    compat: Dict[str, Any] = None
+    project: str = None
+    meta: List[str] = None
+    message: queue.Queue = None
+
     mode: str = "perf"  # noop | debug | perf
-    meta: List[str] = []
-    message: queue.Queue = queue.Queue()
     disable_store: bool = True  # TODO: make false
     disable_iface: bool = False
     disable_progress: bool = True
@@ -56,47 +57,54 @@ class Settings:
     url_view: str = None
     url_webhook: str = None
 
+    _url_defaults = {
+        "url_app": "https://app.mlop.ai",
+        "url_api": "https://api-prod.mlop.ai",
+        "url_ingest": "https://ingest-prod.mlop.ai",
+        "url_py": "https://py-prod.mlop.ai",
+    }
+    _url_ports = {"url_app": 3000, "url_api": 3001, "url_ingest": 3003, "url_py": 3004}
+    _url_routes = {
+        "url_token": ("url_app", "/api-keys"),
+        "url_login": ("url_api", "/api/slug"),
+        "url_start": ("url_api", "/api/runs/create"),
+        "url_stop": ("url_api", "/api/runs/status/update"),
+        "url_meta": ("url_api", "/api/runs/logName/add"),
+        "url_graph": ("url_api", "/api/runs/modelGraph/create"),
+        "url_num": ("url_ingest", "/ingest/metrics"),
+        "url_data": ("url_ingest", "/ingest/data"),
+        "url_file": ("url_ingest", "/files"),
+        "url_message": ("url_ingest", "/ingest/logs"),
+        "url_alert": ("url_py", "/api/runs/alert"),
+        "url_trigger": ("url_py", "/api/runs/trigger"),
+    }
+
+    def __init__(self) -> None:  # mutable defaults
+        self._sys = {}
+        self.dir = str(os.path.abspath(os.getcwd()))
+        self.compat = {}
+        self.project = self.tag
+        self.meta = []
+        self.message = queue.Queue()
+
+    def __getattr__(self, name):
+        if name in self._url_routes:
+            base_name, route = self._url_routes[name]
+            return getattr(self, base_name) + route
+        if name in self._url_defaults:
+            if self.host is not None:
+                return f"http://{self.host}:{self._url_ports[name]}"
+            return self._url_defaults[name]
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
     def update(self, settings) -> None:
         if isinstance(settings, Settings):
             settings = settings.to_dict()
         for key, value in settings.items():
             setattr(self, key, value)
-        self.update_host()
-
-    def update_host(self):
-        if self.host is not None:
-            self.url_app = f"http://{self.host}:3000"
-            self.url_api = f"http://{self.host}:3001"
-            self.url_ingest = f"http://{self.host}:3003"
-            self.url_py = f"http://{self.host}:3004"
-        elif not (  # backwards compatibility
-            hasattr(self, "url_app")
-            and hasattr(self, "url_api")
-            and hasattr(self, "url_ingest")
-            and hasattr(self, "url_py")
-        ):
-            self.url_app = "https://app.mlop.ai"
-            self.url_api = "https://api-prod.mlop.ai"
-            self.url_ingest = "https://ingest-prod.mlop.ai"
-            self.url_py = "https://py-prod.mlop.ai"
-        self.update_url()
-
-    def update_url(self):
-        self.url_token = f"{self.url_app}/api-keys"
-        self.url_login = f"{self.url_api}/api/slug"
-        self.url_start = f"{self.url_api}/api/runs/create"
-        self.url_stop = f"{self.url_api}/api/runs/status/update"
-        self.url_meta = f"{self.url_api}/api/runs/logName/add"
-        self.url_graph = f"{self.url_api}/api/runs/modelGraph/create"
-        self.url_num = f"{self.url_ingest}/ingest/metrics"
-        self.url_data = f"{self.url_ingest}/ingest/data"
-        self.url_file = f"{self.url_ingest}/files"
-        self.url_message = f"{self.url_ingest}/ingest/logs"
-        self.url_alert = f"{self.url_py}/api/runs/alert"
-        self.url_trigger = f"{self.url_py}/api/runs/trigger"
 
     def to_dict(self) -> Dict[str, Any]:
-        return {key: getattr(self, key) for key in self.__annotations__.keys()}
+        return {key: getattr(self, key) for key in self.__class__.__annotations__}
 
     def get_dir(self) -> str:
         return os.path.join(
@@ -147,8 +155,10 @@ def get_console() -> str:
         return "jupyter"
 
 
-def setup(settings: Union[Settings, Dict[str, Any], None] = None) -> None:
-    if not isinstance(settings, Settings):
-        settings = Settings()
-    settings.update(settings)
-    return settings
+def setup(settings: Union[Settings, Dict[str, Any], None] = None) -> Settings:
+    if isinstance(settings, Settings):
+        return settings
+    s = Settings()
+    if isinstance(settings, dict) and settings:
+        s.update(settings)
+    return s

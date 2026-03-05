@@ -32,7 +32,7 @@ def init(
     name: Union[str, None] = None,
     # id: str | None = None,
     config: Union[dict, str, None] = None,
-    settings: Union[Settings, Dict[str, Any], None] = dict(),
+    settings: Union[Settings, Dict[str, Any], None] = None,
     **kwargs,
 ) -> Op:
     # TODO: remove legacy compat

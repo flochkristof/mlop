@@ -87,7 +87,7 @@ def stream_formatter(settings):
 
 def input_hook(prompt="", logger=None):
     content = _input(prompt)
-    logger.warn(f"{prompt}{content}")
+    logger.warning(f"{prompt}{content}")
     return content
 
 

@@ -351,7 +351,7 @@ def make_compat_image_numpy(val: any) -> any:
         val = (val - np.min(val)) / (np.max(val) - np.min(val))
     if np.max(val) <= 1:
         val = (val * 255).astype(np.int32)
-    val.clip(0, 255).astype(np.uint8)
+    val = val.clip(0, 255).astype(np.uint8)
 
     image = PILImage.fromarray(val, mode="RGBA" if val.shape[-1] == 4 else "RGB")
     return image
